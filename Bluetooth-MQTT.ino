@@ -1,144 +1,149 @@
 #include <WiFi.h>
-#include <WiFiClient.h>
+#include <WiFiClientSecure.h>
 #include <PubSubClient.h>
-#include <BLEDevice.h>
-#include <BLEScan.h>
-#include <BLEAddress.h>
- 
-// MQTT-Parameter
-#define MQTT_server ""
-#define MQTT_port 1883
-#define MQTT_user ""
-#define MQTT_pass ""
-#define MQTT_name "btscanner1"
-#define MQTT_scantopic ""
-#define MQTT_statustopic ""
-#define QoS 0
- 
-const char* ssid = ""; // WLAN-Name
-const char* ssidkey = ""; // WLAN-Schlüssel
- 
-int scanTime = 10; // Suchzeit
+#include <NimBLEDevice.h>
+#include <NimBLEScan.h>
+#include <NimBLEAddress.h>
+#include <NimBLEBeacon.h>
+
+#define MQTT_server ""         // FQDN of your MQTT broker
+#define MQTT_tcpport 8883      // tcp port to use, defaults to 8883 for tls secured connections
+#define MQTT_username ""       // user name to use to connect to MQTT broker
+#define MQTT_password ""       // password to use to connect to MQTT broker
+#define MQTT_clientid ""       // clientid to use when connecting with MQTT broker
+#define MQTT_willtopic ""      // topic to publish testament/last will 
+#define MQTT_sensortopic ""    // topic to publish found beacons
+
+#define ENDIAN_CHANGE_U16(x) ((((x)&0xFF00) >> 8) + (((x)&0xFF) << 8))
+
+int BLEscanTime = 5;
+
+const char* ssid = "";         // name of your wireless network
+const char* ssidkey = "";      // password to connect to your wireless network
+
+const char root_ca[] PROGMEM = R"=====(
+-----BEGIN CERTIFICATE-----
+-----END CERTIFICATE-----
+)=====" ;                      /* add your x509 encoded root certificate here. This certificate will be used to verify your MQTT broker's SSL certificate.
+                                  In case there's an intermediate certificate in between, add both, root and intermediate certificate here. */
+
+
 BLEScan* pBLEScan;
-WiFiClient wclient;
-PubSubClient mqtt(MQTT_server, 1883, wclient);
- 
+WiFiClientSecure wclient;
+PubSubClient mqtt(MQTT_server, MQTT_tcpport, wclient);
+
+
+class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
+{
+  #define MSG_BUFFER_SIZE (150)
+  char msg[MSG_BUFFER_SIZE];
+
+  void onResult(BLEAdvertisedDevice *advertisedDevice)
+  {
+    if (advertisedDevice->haveServiceUUID())
+    {
+      delay(1);
+    }
+    else
+    {
+      if (advertisedDevice->haveManufacturerData() == true)
+      {
+        std::string strManufacturerData = advertisedDevice->getManufacturerData();
+        std::string deviceAddress = advertisedDevice->getAddress();
+        uint8_t cManufacturerData[100];
+        strManufacturerData.copy((char *)cManufacturerData, strManufacturerData.length(), 0);
+
+        if (strManufacturerData.length() == 25 && cManufacturerData[0] == 0x4C && cManufacturerData[1] == 0x00)
+        {
+          BLEBeacon iBeacon = BLEBeacon();
+          iBeacon.setData(strManufacturerData);
+          Serial.printf("iBeacon found - ID: %04X Major: %04X Minor: %04X UUID: %s MAC: %s Power: %d\n", iBeacon.getManufacturerId(), ENDIAN_CHANGE_U16(iBeacon.getMajor()), ENDIAN_CHANGE_U16(iBeacon.getMinor()), iBeacon.getProximityUUID().toString().c_str(), deviceAddress.c_str(), iBeacon.getSignalPower());
+          snprintf (msg, MSG_BUFFER_SIZE, "{\"IBEACON\":{\"UID\":\"%s\",\"MAJOR\":\"%04X\",\"MINOR\":\"%04X\",\"MAC\":\"%s\",\"RSSI\":%d}}", iBeacon.getProximityUUID().toString().c_str(), ENDIAN_CHANGE_U16(iBeacon.getMajor()), ENDIAN_CHANGE_U16(iBeacon.getMinor()), deviceAddress.c_str(), iBeacon.getSignalPower());
+          mqtt.publish(MQTT_sensortopic, msg);
+        }
+      }
+      return;
+    }
+  }
+};
+
+
 void setup()
 {
   int i;
+  int timeout = 0;
   Serial.begin(115200);
-  Serial.println("Booted");
-  Serial.println("Warte auf WLAN-Verbindung");
+  Serial.println("Started up");
+  Serial.println("Waiting for Wifi");
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, ssidkey);
   Serial.println("");
-  int timeout = 0;
   while (WiFi.status() != WL_CONNECTED)
   {
     delay(500);
     Serial.print(".");
     timeout++;
-    if  (timeout > 60) // Wenn Anmeldung nicht möglich
+    if (timeout > 60)
     {
-      Serial.println("\r\nWLAN-Verbindung fehlt. Reboot.");
-      ESP.restart(); // ESP32 neu starten
+      Serial.println("\r\nWifi issue. Rebooting.");
+      ESP.restart();
     }
   }
   Serial.println("");
-  Serial.print("IP Addresse: ");
+  Serial.print("IP Address: ");
   Serial.println(WiFi.localIP());
+
+  wclient.setCACert(root_ca);
  
-  // ---------------------- MQTT ---------------------------------------------------
-  if (mqtt.connect(MQTT_name, MQTT_user, MQTT_pass))
+  if (mqtt.connect(MQTT_clientid, MQTT_username, MQTT_password, MQTT_willtopic, 0, true, "OFF"))
   {
-    Serial.println("\r\nMQTT-Verbindung hergestellt");
+    Serial.println("\r\nConnection to broker established");
     mqtt.setBufferSize(2048);
-    mqtt.publish(MQTT_statustopic,"Geraet verbunden");
+    mqtt.publish(MQTT_willtopic, "ON", true);
   }
  
-  Serial.println("Starte BLE Scanner");
+  Serial.println("Starting BLE scan");
   BLEDevice::init("");
   pBLEScan = BLEDevice::getScan();
+  pBLEScan->setAdvertisedDeviceCallbacks(new MyAdvertisedDeviceCallbacks());
   pBLEScan->setActiveScan(true);
   pBLEScan->setInterval(100);
   pBLEScan->setWindow(99);
 }
- 
+
+
 void loop()
 {
-  int j;
-  String jsonscanresult;
-  BLEScanResults foundDevices = pBLEScan->start(scanTime);
- 
-  jsonscanresult = "{\"Results\":{";
- 
-  for (j = 0; j < foundDevices.getCount(); j++)
-  {
-    jsonscanresult = jsonscanresult + "\"" + foundDevices.getDevice(j).getAddress().toString().c_str() + "\":{";
-    if (j != foundDevices.getCount() - 1) {
-      if (foundDevices.getDevice(j).haveName()) {
-         jsonscanresult = jsonscanresult + "\"name:\"" + foundDevices.getDevice(j).getName().c_str() + "\","; 
-      }
-      else jsonscanresult = jsonscanresult + "\"name\":\"\",";
-
-      if (foundDevices.getDevice(j).haveServiceUUID()) {
-         jsonscanresult = jsonscanresult + "\"serviceuuid\":\"" + foundDevices.getDevice(j).getServiceUUID().toString().c_str() + "\","; 
-      }
-      else jsonscanresult = jsonscanresult + "\"serviceuuid\":\"\",";
-
-      if (foundDevices.getDevice(j).haveManufacturerData()) {
-         jsonscanresult = jsonscanresult + "\"servicemfdata\":\"" + foundDevices.getDevice(j).getManufacturerData().c_str() + "\","; 
-      }
-      else jsonscanresult = jsonscanresult + "\"servicemfdata\":\"\",";
-      
-      jsonscanresult = jsonscanresult +  "\"rssi\":" + String(foundDevices.getDevice(j).getRSSI()) + "},";
-    }
-    else {
-      if (foundDevices.getDevice(j).haveName()) {
-         jsonscanresult = jsonscanresult + "\"name:\"" + foundDevices.getDevice(j).getName().c_str() + "\","; 
-      }
-      else jsonscanresult = jsonscanresult + "\"name\":\"\",";
-
-      if (foundDevices.getDevice(j).haveServiceUUID()) {
-         jsonscanresult = jsonscanresult + "\"serviceuuid\":\"" + foundDevices.getDevice(j).getServiceUUID().toString().c_str() + "\","; 
-      }
-      else jsonscanresult = jsonscanresult + "\"serviceuuid\":\"\",";
-
-      if (foundDevices.getDevice(j).haveManufacturerData()) {
-         jsonscanresult = jsonscanresult + "\"servicemfdata\":\"" + foundDevices.getDevice(j).getManufacturerData().c_str() + "\","; 
-      }
-      else jsonscanresult = jsonscanresult + "\"servicemfdata\":\"\",";
-      
-      jsonscanresult = jsonscanresult +  "\"rssi\":" + String(foundDevices.getDevice(j).getRSSI()) + "}";
-    }
-    
-  }
-  jsonscanresult = jsonscanresult + "}}";
-  pBLEScan->clearResults(); // Speicher freigeben
-  mqtt.publish(MQTT_scantopic, (char*) jsonscanresult.c_str());
-  Serial.println(jsonscanresult);
+  BLEScanResults foundDevices = pBLEScan->start(BLEscanTime, false);
   delay(100);
-  if (WiFi.status() != WL_CONNECTED)  ESP.restart();
+  pBLEScan->clearResults();
+  delay(100);
+
+  if (WiFi.status() != WL_CONNECTED) ESP.restart();
+  
   if (mqtt.connected())
   {
     mqtt.loop();
   }
   else
   {
-    Serial.println("MQTT Verbindung verloren");
-    mqtt.connect(MQTT_name, MQTT_user, MQTT_pass);
+    Serial.println("Connection to broker lost");
+    mqtt.connect(MQTT_clientid, MQTT_username, MQTT_password, MQTT_willtopic, 0, true, "Offline");
     int timeout = 0;
+  
     while (!mqtt.connected())
     {
      delay(500);
      Serial.print(".");
      timeout++;
-     if  (timeout > 60) //
+    
+     if  (timeout > 60)
      {
-       Serial.println("\r\nMQTT-Verbindung verloren. Reboot.");
+       Serial.println("\r\nConnection to broker lost. Rebooting.");
        ESP.restart();
      }
     }
-   mqtt.publish(MQTT_statustopic,"Geraet neu verbunden");
+
+   mqtt.publish(MQTT_willtopic, "Online", true);
   }
 }
