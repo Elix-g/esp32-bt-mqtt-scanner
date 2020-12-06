@@ -1,9 +1,9 @@
-
+  
 Fork of the esp32-bt-mqtt-scanner published in ct magazine 26/2020.
-
-
+  
+  
 Differences:
-
+  
   - Implementing WifiSecureClient library instead of WifiClient in order to allow TLS encrypted MQTT connections.
   
   - Implementing NimBLE library instead of ESP32 BLE in order to decrease program memory usage.
@@ -15,11 +15,11 @@ Differences:
   - Publish retained message upon connecting to MQTT broker to indicate device is online
   
   - Implementing last will/testament
-
-
+  
+  
 Usage:
-
-Copy code to Arduino IDE and add required parameters. All parameters with a comment are required. Upload to your ESP32:
+  
+Copy code to Arduino IDE and add required parameters. All parameters with a comment are required. Make sure PubSubClient by Nick O'Leary (tested with 2.8.0) and NimBLE-Arduino by h2zero (tested with 1.0.2) are in your library. Upload sketch to your ESP32:
 
   - Board according to your ESP32 device
   - Upload Speed 921600
