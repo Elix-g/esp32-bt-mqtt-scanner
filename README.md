@@ -4,13 +4,17 @@ Fork of the esp32-bt-mqtt-scanner published in ct magazine 26/2020.
 
 Differences:
 
-  - Implementing WifiSecureClient library instead of WifiClient in order to allow TLS encrypted MQTT connections
+  - Implementing WifiSecureClient library instead of WifiClient in order to allow TLS encrypted MQTT connections.
   
-  - Implementing NimBLE library instead of ESP32 BLE in order to decrease program memory usage from ~70% to ~50%
+  - Implementing NimBLE library instead of ESP32 BLE in order to decrease program memory usage.
   
   - Searching for iBeacons only, ignore all other types. Can easily be extended with other beacon types.
   
-  - MQTT payload as proper JSON string
+  - MQTT payload as proper JSON string.
+  
+  - Publish retained message upon connecting to MQTT broker to indicate device is online
+  
+  - Implementing last will/testament
 
 
 Usage:
