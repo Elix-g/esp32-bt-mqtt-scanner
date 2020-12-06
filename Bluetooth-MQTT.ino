@@ -57,8 +57,12 @@ class MyAdvertisedDeviceCallbacks : public BLEAdvertisedDeviceCallbacks
         {
           BLEBeacon iBeacon = BLEBeacon();
           iBeacon.setData(strManufacturerData);
-          Serial.printf("iBeacon found - ID: %04X Major: %04X Minor: %04X UUID: %s MAC: %s Power: %d\n", iBeacon.getManufacturerId(), ENDIAN_CHANGE_U16(iBeacon.getMajor()), ENDIAN_CHANGE_U16(iBeacon.getMinor()), iBeacon.getProximityUUID().toString().c_str(), deviceAddress.c_str(), iBeacon.getSignalPower());
-          snprintf (msg, MSG_BUFFER_SIZE, "{\"IBEACON\":{\"UID\":\"%s\",\"MAJOR\":\"%04X\",\"MINOR\":\"%04X\",\"MAC\":\"%s\",\"RSSI\":%d}}", iBeacon.getProximityUUID().toString().c_str(), ENDIAN_CHANGE_U16(iBeacon.getMajor()), ENDIAN_CHANGE_U16(iBeacon.getMinor()), deviceAddress.c_str(), iBeacon.getSignalPower());
+          Serial.printf("iBeacon found - ID: %04X Major: %04X Minor: %04X UUID: %s MAC: %s Power: %d\n",
+           iBeacon.getManufacturerId(), ENDIAN_CHANGE_U16(iBeacon.getMajor()), ENDIAN_CHANGE_U16(iBeacon.getMinor()),
+           iBeacon.getProximityUUID().toString().c_str(), deviceAddress.c_str(), iBeacon.getSignalPower());
+          snprintf (msg, MSG_BUFFER_SIZE, "{\"IBEACON\":{\"UID\":\"%s\",\"MAJOR\":\"%04X\",\"MINOR\":\"%04X\",\"MAC\":\"%s\",\"RSSI\":%d}}",
+           iBeacon.getProximityUUID().toString().c_str(), ENDIAN_CHANGE_U16(iBeacon.getMajor()),
+           ENDIAN_CHANGE_U16(iBeacon.getMinor()), deviceAddress.c_str(), iBeacon.getSignalPower());
           mqtt.publish(MQTT_sensortopic, msg);
         }
       }
