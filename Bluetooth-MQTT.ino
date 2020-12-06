@@ -99,11 +99,11 @@ void setup()
 
   wclient.setCACert(root_ca);
  
-  if (mqtt.connect(MQTT_clientid, MQTT_username, MQTT_password, MQTT_willtopic, 0, true, "OFF"))
+  if (mqtt.connect(MQTT_clientid, MQTT_username, MQTT_password, MQTT_willtopic, 0, true, "Offline"))
   {
     Serial.println("\r\nConnection to broker established");
     mqtt.setBufferSize(2048);
-    mqtt.publish(MQTT_willtopic, "ON", true);
+    mqtt.publish(MQTT_willtopic, "Online", true);
   }
  
   Serial.println("Starting BLE scan");
