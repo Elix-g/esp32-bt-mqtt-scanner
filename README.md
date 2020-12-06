@@ -8,7 +8,7 @@ Differences:
   
   - Implementing NimBLE library instead of ESP32 BLE in order to decrease program memory usage from ~70% to ~50%
   
-  - Searching for iBeacons only, ignore all other types
+  - Searching for iBeacons only, ignore all other types. Can easily be extended with other beacon types.
   
   - MQTT payload as proper JSON string
 
